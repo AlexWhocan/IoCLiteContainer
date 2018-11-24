@@ -1,0 +1,24 @@
+﻿using System;
+using System.Runtime.Serialization;
+
+namespace IoCLiteContainer.Exceptions
+{
+    public class NoItemRegisterdException : Exception
+    {
+        public NoItemRegisterdException()
+        {
+        }
+
+        public NoItemRegisterdException(string message) : base(message)
+        {
+        }
+
+        public NoItemRegisterdException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        protected NoItemRegisterdException(SerializationInfo info, StreamingContext context) : base(info, context)
+        {
+        }
+    }
+}
