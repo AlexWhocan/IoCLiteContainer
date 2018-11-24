@@ -5,13 +5,13 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("IoCLiteContainer")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("IoCLiteContainer.EducationSample")]
+[assembly: AssemblyDescription("Basic IoC container for educational purposes")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Alex Alshevski")]
 [assembly: AssemblyProduct("IoCLiteContainer")]
 [assembly: AssemblyCopyright("Copyright ©  2018")]
-[assembly: AssemblyTrademark("")]
+[assembly: AssemblyTrademark("No Trademark")]
 [assembly: AssemblyCulture("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible

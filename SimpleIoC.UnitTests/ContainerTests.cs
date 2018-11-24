@@ -15,11 +15,12 @@ namespace SimpleIoC.UnitTests
         public void InstantiateAsSingleton_ReturnsSameObject()
         {
             var container = IoCLite.CreateInstance();
-
-            container
-                .UseSingleton()
+            var configuration = new IoCLiteContainerConfiguration();
+            configuration
                 .Register<MessagePrefix, MessagePrefix>()
                 .Register<ILogger, ConsoleLogger>();
+
+            container.SetConfiguration(configuration).UseSingleton();
 
             var instance1 = container.Resolve<ILogger>();
             var instance2 = container.Resolve<ILogger>();
@@ -31,10 +32,13 @@ namespace SimpleIoC.UnitTests
         public void InstantiateAsTransient_ReturnsDifferentInstances()
         {
             var container = IoCLite.CreateInstance();
-
-            container
+            var configuration = new IoCLiteContainerConfiguration();
+            
+            configuration
                 .Register<MessagePrefix, MessagePrefix>()
                 .Register<ILogger, ConsoleLogger>();
+
+            container.SetConfiguration(configuration);
 
             var instance1 = container.Resolve<ILogger>();
             var instance2 = container.Resolve<ILogger>();
@@ -46,11 +50,14 @@ namespace SimpleIoC.UnitTests
         public void TryInstantiateWithMissedTypes_ThrowsException()
         {
             var container = IoCLite.CreateInstance();
-
+            var configuration = new IoCLiteContainerConfiguration();
+            
             // No MessagePrefix and another classes registered 
-            container
+            configuration
                 .Bind<IMessageService>().To<MessageService>()
                 .Register<ILogger, ConsoleLogger>();
+
+            container.SetConfiguration(configuration);
 
             Assert.Throws<InvalidTypeRegistrationException>(() => container.Resolve<IMessageService>());
         }
@@ -59,12 +66,15 @@ namespace SimpleIoC.UnitTests
         public void TryRunService_GetValidResult()
         {
             var container = IoCLite.CreateInstance();
-
-            container
+            var configuration = new IoCLiteContainerConfiguration();
+            
+            configuration
                 .Register<IMessageService, MessageService>()
                 .Register<IMailSender, EmailMailSender>()
                 .Register<ILogger, ConsoleLogger>()
                 .Register<MessagePrefix, MessagePrefix>();
+
+            container.SetConfiguration(configuration).UseSingleton();
 
             var resolvedService = container.Resolve<IMessageService>();
             resolvedService.SendMessage("Just send it already");
@@ -76,34 +86,45 @@ namespace SimpleIoC.UnitTests
         [Test]
         public void RegisterTypes_AreRegistered()
         {
-            var container = IoCLite.CreateInstance();
+            var configuration = new IoCLiteContainerConfiguration();
 
-            container
+            configuration
                 .Register<ILogger, ConsoleLogger>();
 
-            var res = container.GetAllRegisteredTypes();
+            var res = configuration.GetAllRegisteredTypes();
 
-            Type registredType;
-            bool isContaining = res.TryGetValue(typeof(ILogger), out registredType);
+            Type registeredType;
+            bool isContaining = res.TryGetValue(typeof(ILogger), out registeredType);
 
             Assert.IsTrue(isContaining);
-            Assert.AreEqual(typeof(ConsoleLogger), registredType);
+            Assert.AreEqual(typeof(ConsoleLogger), registeredType);
         }
 
         [Test]
         public void RegisterByAttribute_CorrectInstantiation()
         {
             var container = IoCLite.CreateInstance();
-
-            container
+            var configuration = new IoCLiteContainerConfiguration();
+            
+            configuration
                 .Bind<ILogger>().To<ConsoleLogger>()
                 .Bind<MessagePrefix>().To<MessagePrefix>();
 
+            container.SetConfiguration(configuration);
+            
             var resolvedService = container.Resolve<ILogger>();
 
             var result = resolvedService.PrefixMessage.Prefix;
 
             Assert.AreEqual(result, "SomeCoolPrefix");
+        }
+
+        [Test]
+        public void TryUseWithoutConfiguration_ThrowsNoRegisteredException()
+        {
+            var container = IoCLite.CreateInstance();
+
+            Assert.Throws<ArgumentNullException>(() => container.Resolve<IMessageService>());
         }
     }
 }

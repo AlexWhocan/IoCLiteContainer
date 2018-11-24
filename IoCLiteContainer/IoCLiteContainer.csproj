@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Attributes\InjectionRequiredAttribute.cs" />
+    <Compile Include="IoCLiteContainerConfiguration.cs" />
     <Compile Include="Exceptions\InvalidTypeRegistrationException.cs" />
     <Compile Include="Exceptions\NoItemRegisterdException.cs" />
     <Compile Include="Interfaces\IFromType.cs" />

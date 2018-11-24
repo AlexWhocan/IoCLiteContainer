@@ -1,23 +1,42 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using IoCLiteContainer.Attributes;
 using IoCLiteContainer.Exceptions;
 using IoCLiteContainer.Interfaces;
 
 namespace IoCLiteContainer
 {
-    // TODO: Create builder for type matching as ConfigurationCollection(Or something like that)
-    // TODO: Implement functionality to pass user's fabric predicates or ready objects
-    // TODO: push dat terrible terror of NuGet.org (God bless those guys)
-    public class IoCLite : IInjection, IFromType, IToType
+    // TODO: push dat terrible terror to NuGet.org (God bless those guys)
+    public class IoCLite
     {
-        private readonly Dictionary<Type, Type> _registeredTypes = new Dictionary<Type, Type>();
+        private Dictionary<Type, Type> _registeredTypes;
         private readonly Dictionary<Type, object> _instances = new Dictionary<Type, object>();
-        private Type _tmpTypeFrom;
         private bool _isSingletonMode;
 
+        /// <summary>
+        /// Fabric method of IoCLite container
+        /// </summary>
+        /// <returns>New instance of container</returns>
         public static IoCLite CreateInstance() => new IoCLite();
+
+        /// <summary>
+        /// Declares instantiation method for all types in this container as Singleton.
+        /// </summary>
+        /// <returns><see cref="IFromType"/> builder for fluent syntax</returns>
+        public void UseSingleton() => _isSingletonMode = true;
+
+        /// <summary>
+        /// Sets target type matching from <see cref="IoCLiteContainerConfiguration"/>
+        /// </summary>
+        /// <param name="config"></param>
+        /// <returns></returns>
+        public IoCLite SetConfiguration(IoCLiteContainerConfiguration config)
+        {
+            _registeredTypes = config.GetAllRegisteredTypes() ?? throw new ArgumentNullException("Invalid Config");
+            return this;
+        }
 
         /// <summary>
         /// Resolve registered dependencies with respect to generic parameter.
@@ -26,6 +45,11 @@ namespace IoCLiteContainer
         /// <returns>Instance of resolved type</returns>
         public T Resolve<T>() where T : class
         {
+            if (_registeredTypes == null)
+            {
+                throw new ArgumentNullException("No configuration passed");
+            }
+
             if (!_registeredTypes.Any())
             {
                 throw new NoItemRegisterdException("No entity has been registered yet.");
@@ -45,61 +69,47 @@ namespace IoCLiteContainer
                 _instances.Add(typeof(T), resolveInstance);
 
             return resolveInstance;
-        } 
-
-        /// <summary>
-        /// Registers generic passed type as pending to be registered.
-        /// </summary>
-        /// <typeparam name="TFrom">Type to be resolved</typeparam>
-        /// <returns>Builder for To() method</returns>
-        public IToType Bind<TFrom>()
-        {
-            _tmpTypeFrom = typeof(TFrom);
-            return this;
         }
 
-        /// <summary>
-        /// Registers generic passed type as resolving for previously registered type.
-        /// </summary>
-        /// <typeparam name="TTo">Resolving type</typeparam>
-        /// <returns><see cref="IFromType"/> builder for fluent syntax</returns>
-        public IFromType To<TTo>()
+        private object ResolveParameter(Type rootType)
         {
-            if (_registeredTypes.ContainsKey(_tmpTypeFrom))
-                _registeredTypes[_tmpTypeFrom] = typeof(TTo);
-            else
+            Type pendingType = null;
+
+            // Return instance from inner storage
+            if (_isSingletonMode && _instances.ContainsKey(rootType))
+                return _instances.First(f => f.Key == rootType).Value;  
+
+            pendingType = _registeredTypes[rootType];
+
+            var ctor = GetConstructor(pendingType);
+
+            var ctorParams = GetConstructorParameters(ctor);
+
+            //Instantiate as endpoint type
+            if (!ctorParams.Any())
             {
-                _registeredTypes.Add(_tmpTypeFrom, typeof(TTo));
-                _tmpTypeFrom = null;
+                var simpleInstance = ctor.Invoke(null);
+                ResolveProperties(pendingType, simpleInstance);
+
+                return simpleInstance;
+            }
+            
+            var paramLst = new List<object>(ctorParams.Count());
+
+            //Collect all endpoint types in c-tor parameters
+            for (int i = 0; i < ctorParams.Count(); i++)
+            {
+                var paramType = ctorParams.ElementAt(i).ParameterType;
+                var resolvedParam = ResolveParameter(paramType);
+                paramLst.Add(resolvedParam);
             }
 
-            return this;
-        }
+            //Instantiate with dependency injections
+            var instance = ctor.Invoke(paramLst.ToArray());
+            ResolveProperties(rootType, instance);
 
-        /// <summary>
-        /// Declares instantiation method for all types in this container as Singleton.
-        /// </summary>
-        /// <returns><see cref="IFromType"/> builder for fluent syntax</returns>
-        public IFromType UseSingleton()
-        {
-            _isSingletonMode = true;
-            return this;
+            return instance;
         }
-
-        /// <summary>
-        /// Declares type matching for container to resolve.
-        /// </summary>
-        /// <typeparam name="TFrom">Type to be resolver</typeparam>
-        /// <typeparam name="TTo">Actual type of previous parameter</typeparam>
-        /// <returns><see cref="IFromType"/> builder for fluent syntax</returns>
-        public IFromType Register<TFrom, TTo>() where TTo : TFrom
-            => Bind<TFrom>().To<TTo>();
-        
-        public Dictionary<Type, Type> GetAllRegisteredTypes()
-            => _registeredTypes;
-        
-        public bool IsRegistered<TType>()
-            => _registeredTypes.Any(a => a.Key == typeof(TType));
 
         private void ResolveProperties(Type rootType, object obj)
         {
@@ -119,45 +129,30 @@ namespace IoCLiteContainer
             }
         }
 
-        private object ResolveParameter(Type rootType)
-        {
-            Type pendingType = null;
-
-            if (_isSingletonMode && _instances.ContainsKey(rootType))
-            {
-                return _instances.First(f => f.Key == rootType).Value;
-            }
-            else
-                pendingType = _registeredTypes[rootType];
-
-            var ctor = pendingType.GetConstructors()
-                            .OrderByDescending(constructors => constructors.GetParameters().Length)
-                            .FirstOrDefault()
-                        ?? throw new InvalidOperationException(nameof(pendingType));
-            var ctorParams = ctor.GetParameters()
+        private IEnumerable<ParameterInfo> GetConstructorParameters(ConstructorInfo constructor)
+            => constructor.GetParameters()
                 .Where(parameter => parameter.GetType().IsClass);
 
-            if (!ctorParams.Any())
-            {
-                var simpleInstance = Activator.CreateInstance(pendingType);
-                ResolveProperties(pendingType, simpleInstance);
-
-                return simpleInstance;
-            }
-            
-            var paramLst = new List<object>(ctorParams.Count());
-
-            for (int i = 0; i < ctorParams.Count(); i++)
-            {
-                var paramType = ctorParams.ElementAt(i).ParameterType;
-                var resolvedParam = ResolveParameter(paramType);
-                paramLst.Add(resolvedParam);
-            }
-
-            var instance = ctor.Invoke(paramLst.ToArray());
-            ResolveProperties(rootType, instance);
-
-            return instance;
+        private ConstructorInfo GetConstructor(Type pendingType)
+        {
+            return pendingType.GetConstructors()
+                    .OrderByDescending(constructors => constructors.GetParameters().Length)
+                    .FirstOrDefault()
+                ?? throw new InvalidOperationException(nameof(pendingType));
         }
+
+        //private Func<T> GetSimpleInstance()
+        //{
+        //    Type t = typeof(T);
+        //    if (HasDefaultConstructor(t))
+        //            return Expression.Lambda<Func<T>>(Expression.New(t)).Compile();
+
+
+        //}
+
+        //private bool HasDefaultConstructor(Type pendingType)
+        //{
+        //    return pendingType.IsValueType || pendingType.GetConstructor(Type.EmptyTypes) != null;
+        //}
     }
 }
